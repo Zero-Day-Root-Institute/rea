@@ -33,7 +33,7 @@ jobs:
     # Step 2: run the sync action
     - name: Sync upstream changes
       id: sync
-      uses: morluto/rea
+      uses: morluto/rea@ref
       with:
         target_sync_branch: main
         # REQUIRED 'target_repo_token' exactly like this!
