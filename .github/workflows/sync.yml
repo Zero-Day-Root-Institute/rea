@@ -16,7 +16,6 @@ jobs:
   sync_latest_from_upstream:
     runs-on: ubuntu-latest
     name: Sync latest commits from upstream repo
-
     steps:
     # REQUIRED step
     # Step 1: run a standard checkout action, provided by github
