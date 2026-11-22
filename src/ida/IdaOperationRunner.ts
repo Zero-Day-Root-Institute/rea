@@ -6,7 +6,6 @@ import {
   nativeDisassemblySchema,
   nativeCalleesSchema,
   nativeXrefsSchema,
-  nativeLiteralSearchPattern,
 } from "./IdaNativeProtocol.js";
 import {
   analysisSearchPredicate,
@@ -44,6 +43,7 @@ import type { EvidenceLocation } from "../domain/evidence.js";
 import {
   idaAddressSchema,
   idaFunctionSchema,
+  idaLiteralSearchPattern,
   idaStringsPageSchema,
   modernCalleesSchema,
   modernDecompileSchema,
@@ -230,18 +230,25 @@ export class IdaOperationRunner {
       throw new AnalysisProtocolError(
         `IDA function lookup failed for ${query}: ${outcome.missing}`,
       );
+    const message = `IDA could not resolve procedure ${JSON.stringify(query)}: ${outcome.missing}.`;
     throw new AnalysisInputError(
       requestedBy,
       {
         cause: new AnalysisProtocolError(
           `IDA function lookup failed for ${query}: ${outcome.missing}`,
         ),
+        userMessage: message,
+        conformsToInputContract: true,
+        related: { operations: ["list_procedures", "search_procedures"] },
+        remediationAction:
+          "Choose an observed name or address from the current IDA inventory. CLI: rea search <path> . --kind procedures --mode regex --provider ida. MCP: use search_procedures or list_procedures. An inventory miss leaves the function's presence in the artifact unknown.",
       },
       [
         {
-          path: [],
+          path: ["procedure"],
           reason: "invalid_value",
-          message: `IDA could not resolve procedure ${JSON.stringify(query)}: ${outcome.missing}.`,
+          message,
+          observed: { procedure: query },
         },
       ],
     );
@@ -311,7 +318,7 @@ export class IdaOperationRunner {
   }
 
   async strings(
-    nativePattern?: string,
+    candidatePattern?: string,
   ): Promise<{ address: string; value: string }[]> {
     if (this.protocol === "native")
       this.limitations.push(IDA_NATIVE_STRING_LIMITATION);
@@ -322,9 +329,8 @@ export class IdaOperationRunner {
       const page = idaStringsPageSchema.parse(
         await this.call("find_regex", {
           pattern:
-            this.protocol === "native"
-              ? (nativePattern ?? "[\\s\\S]*")
-              : "(?s).*",
+            candidatePattern ??
+            (this.protocol === "native" ? "[\\s\\S]*" : "(?s).*"),
           offset,
           limit: 100,
         }),
@@ -590,11 +596,11 @@ export class IdaOperationRunner {
         query === undefined && parameters.address !== undefined
           ? idaAddressSchema.parse(parameters.address)
           : undefined;
-      const nativePattern =
-        this.protocol === "native" && query?.mode === "literal"
-          ? nativeLiteralSearchPattern(query.pattern, query.case_sensitive)
+      const candidatePattern =
+        query?.mode === "literal"
+          ? idaLiteralSearchPattern(query.pattern, query.case_sensitive)
           : undefined;
-      const items = await this.strings(nativePattern);
+      const items = await this.strings(candidatePattern);
       return query !== undefined
         ? this.searchItems(operation, items, query)
         : selectedAddress === undefined
